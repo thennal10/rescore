@@ -15,11 +15,11 @@
       </div>
     </div>
   </div>
-  <section class="section">
-    <div class="container is-max-desktop has-text-centered">
+  <section class="section" v-if="accessToken">
+    <div class="container has-text-centered">
       <h2 class="title"> Pick the one you like more</h2>
       <h3 class="subtitle">Your scores will adjust accordingly.</h3>
-      <div class="columns">
+      <div class="columns is-centered">
         <transition-group name="compare-list">
           <AnimeCompare 
             v-for="anime in compareSet" :key="anime.id"
@@ -28,32 +28,35 @@
           />
         </transition-group>
       </div>
-      <button class="button is-light is-medium" @click="newComparison">Skip</button>
+      <button class="button is-light is-size-5-desktop" @click="newComparison">Skip</button>
     </div>
-  </section>
-  <section class="section container">
-    <div class="buttons">
-      <button class="button is-warning is-medium" @click="updateList">Update</button>
-      <button class="button is-info is-medium" @click="this.animeList.forEach(anime => anime.score = anime.ogScore)">Reset</button>
+    <div class="container mt-6">
+      <h2 class="title has-text-centered">Your Anime List</h2>
+      <div class="buttons">
+        <button class="button is-warning is-size-5-desktop" @click="updateList">Update</button>
+        <button class="button is-danger is-size-5-desktop" @click="this.animeList.forEach(anime => anime.score = anime.ogScore)">Reset</button>
+        <button class="button is-info is-size-5-desktop" @click="this.animeList.forEach(anime => anime.score = 50)">Set all to 50</button>
+      </div>
+      <table class="table is-hoverable is-fullwidth is-size-5 is-size-6-mobile">
+        <thead>
+          <tr>
+            <th style="width: 1%" class="is-hidden-mobile"></th> <!-- Makes it take minimum required space -->
+            <th>Name</th>
+            <th class="has-text-centered">Original Score</th>
+            <th class="has-text-centered">New Score</th>
+          </tr>
+        </thead>
+        <transition-group name="flip-list" tag="tbody">
+          <tr v-for="anime in sortedAnimeList" :key="anime.id">
+            <AnimeItem 
+              :name="anime.name" :imgUrl="anime.imgUrl"
+              v-model:score="anime.score"
+              :id="anime.id" :ogScore="anime.ogScore"
+            />
+          </tr>
+        </transition-group>
+      </table>
     </div>
-    <table class="table is-hoverable is-fullwidth is-size-5 is-size-6-mobile">
-      <thead>
-        <tr>
-          <th style="width: 1%"></th> <!-- Makes it take minimum required space -->
-          <th>Name</th>
-          <th class="has-text-centered">Original Score</th>
-          <th class="has-text-centered">New Score</th>
-        </tr>
-      </thead>
-      <transition-group name="flip-list" tag="tbody">
-        <tr v-for="anime in sortedAnimeList" :key="anime.id">
-          <AnimeItem 
-            :name="anime.name" :imgUrl="anime.imgUrl" 
-            :score="anime.score" :id="anime.id" :ogScore="anime.ogScore"
-          />
-        </tr>
-      </transition-group>
-    </table>
   </section>
   <ConfirmModal 
     :active="confirmModalActive" @close="confirmModalActive = false" 
@@ -77,6 +80,7 @@ export default {
     return {
       animeList: [], 
       compareSet: [],
+      tempCompareSet: [],
       userError: '',
       accessToken: null,
       confirmModalActive: false,
@@ -87,14 +91,20 @@ export default {
     /*
     Only two things are stored in session storage: the accessToken and the animeList
     Initially checks if accessToken is saved
-    getUserId calls getUserList, which conditionally checks whether animeList is saved
-    if an invalid access toke is saved, getUserId catches an error and resets it to null
+    getUserId calls getUserList, which checks whether animeList is saved
+    if an invalid access toke is saved, getUserId catches an error, resets it to null, and
+    calls getAccessToken, which gets it from the hash (if available)
     */
     if (sessionStorage.getItem("accessToken")) {
       this.accessToken = sessionStorage.getItem("accessToken")
       this.getUserId()
     }
     else {
+      this.getAccessToken()
+    }
+  },
+  methods: {
+    getAccessToken() {
       try {
         this.accessToken = window.location.hash.match(/(?<=access_token=)(.*?)(?=&)/)[0]
         this.getUserId()
@@ -106,9 +116,8 @@ export default {
           console.log(error)
         }
       }
-    }
-  },
-  methods: {
+    },
+
     getUserId() {
       // Anilist API query
       var query = `
@@ -141,6 +150,7 @@ export default {
     handleAccessTokenError() {
       this.accessToken = null
       sessionStorage.setItem("accessToken", this.accessToken)
+      this.getAccessToken()
     },
 
     getList(id) {
@@ -282,13 +292,21 @@ export default {
     },
 
     newComparison() {
+      this.compareSet.length = 0
       // Because lol javascript
       const random = (len) => Math.floor(Math.random() * len)
 
       var randomItem1 = this.animeList[random(this.animeList.length)];
       var animeListFiltered = this.animeList.filter(item => item != randomItem1) // Remove it from pool
       var randomItem2 = animeListFiltered[random(animeListFiltered.length)]
-      this.compareSet = [randomItem1, randomItem2]
+      
+      // The below fuckery is required to properly sync animations
+      this.tempCompareSet = [randomItem1, randomItem2]
+      window.setTimeout(this.setComparison, 600)
+    },
+
+    setComparison() {
+      this.compareSet = this.tempCompareSet
     }
   },
   computed: {
@@ -310,16 +328,16 @@ export default {
 
   .compare-list-enter-active,
   .compare-list-leave-active {
-    transition: all 1s ease-in-out;
+    transition: all 0.6s ease-in-out;
   }
 
-  .compare-list-enter-from,
-  .compare-list-leave-to {
-    transform: translateY(40px);
+  .compare-list-enter-from{
+    transform: translateY(10%);
     opacity: 0;
   }
-  
-  .compare-list-leave-active {
-    display: none;
+
+  .compare-list-leave-to {
+    transform: translateY(-10%);
+    opacity: 0;
   }
 </style>
