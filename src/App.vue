@@ -32,6 +32,7 @@
     </div>
     <div class="container mt-6">
       <h2 class="title has-text-centered">Your Anime List</h2>
+      <p class="subtitle has-text-centered">Click on any number in the New Score column to edit it directly.</p>
       <div class="buttons">
         <button class="button is-warning is-size-5-desktop" @click="updateList">Update</button>
         <button class="button is-danger is-size-5-desktop" @click="this.animeList.forEach(anime => anime.score = anime.ogScore)">Reset</button>
