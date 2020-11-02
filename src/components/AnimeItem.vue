@@ -1,23 +1,17 @@
 <template>
-<div class="level my-3 box is-size-4 is-mobile">
-    <div class="level-left">
-      <div class="level-item">
-        <figure class="image is-64x64" :style="backgroundImg">
-        </figure>
-      </div>
-      <div class="level-item">
-        <span>{{ name }}</span>
-      </div>
-    </div>
-    <div class="level-right">
-      <div class="level-item mx-6">
-        <span>{{ ogScore }}</span>
-      </div>
-      <div class="level-item mx-6">
-        <span>{{ roundedScore }}</span>
-      </div>
-    </div>
-  </div>
+  <td>
+    <figure class="image is-48x48" :style="backgroundImg">
+    </figure>
+  </td>
+  <td>
+    <span>{{ name }}</span>
+  </td>
+  <td class="has-text-centered">
+    <span>{{ ogScore }}</span>
+  </td>
+  <td class="has-text-centered" :class="scoreClass">
+    <span>{{ roundedScore }}</span>
+  </td>
 </template>
 <script>
   export default {
@@ -33,17 +27,31 @@
         Score: this.score,
         backgroundImg: {
           'background-image': 'url(' + this.imgUrl + ')',
-          'background-position': 'center'
+          'background-position': 'center',
+          'background-size': 'cover'
         }
       }
     },
     computed: {
       roundedScore() {
         return this.score > 100 ? 100 : this.score < 1 ? 1 : Math.round(this.score);
+      },
+      scoreClass() {
+        if (this.roundedScore > this.ogScore) {
+          return "has-text-success-dark"
+        } 
+        else if (this.roundedScore < this.ogScore) {
+          return "has-text-danger-dark" 
+        } 
+        else { 
+          return "has-text-grey-light"
+        }
       }
     }
   }
 </script>
 <style scoped>
-
+  .table td {
+    border: none;
+  }
 </style>

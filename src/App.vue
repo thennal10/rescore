@@ -1,119 +1,155 @@
 <template>
-  <section class="section has-text-centered">
-    <div class="container is-max-desktop">
-      <h3>Rescore</h3>
-      <UsernameForm @find-user="getUserId"/>
-      <p v-if="userError" class="has-text-danger bold">
-        User '{{ userError }}' doesn't seem to exist.
+  <div class="hero is-fullheight" v-if="!accessToken">
+    <div class="hero-body">
+      <div class="container is-max-desktop has-text-centered">
+        <h1 class="title is-size-2 pb-4">Anilist Rescorer</h1>
+        <p class="subtitle is-size-4">
+          Tired of half the anime on your list being scored way too high by a younger you with a shittier taste?
+          Want to revamp your list but it's too much of a pain to do it normally? Welcome to the anime rescorer. 
         </p>
-      <div class="columns mt-5">
-        <AnimeCompare 
-          v-for="anime in compareSet" :key="anime.id"
-          :name="anime.name" :id="anime.id" :largeImgUrl="anime.largeImgUrl" :score="anime.score"
-          @comparison-clicked="comparisonClick"
-        />
+        <a 
+          class="button is-info is-medium" 
+          href='https://anilist.co/api/v2/oauth/authorize?client_id=4281&response_type=token'>
+          Login with AniList
+        </a>
       </div>
-      <button class="button is-medium is-danger" @click="newComparison">Skip</button>
+    </div>
+  </div>
+  <section class="section">
+    <div class="container is-max-desktop has-text-centered">
+      <h2 class="title"> Pick the one you like more</h2>
+      <h3 class="subtitle">Your scores will adjust accordingly.</h3>
+      <div class="columns">
+        <transition-group name="compare-list">
+          <AnimeCompare 
+            v-for="anime in compareSet" :key="anime.id"
+            :name="anime.name" :id="anime.id" :largeImgUrl="anime.largeImgUrl" :score="anime.score"
+            @comparison-clicked="comparisonClick"
+          />
+        </transition-group>
+      </div>
+      <button class="button is-light is-medium" @click="newComparison">Skip</button>
     </div>
   </section>
   <section class="section container">
-    <button class="button is-medium is-warning" @click="updateList">Update</button>
-    <a 
-      class="button is-medium is-info ml-4" 
-      href='https://anilist.co/api/v2/oauth/authorize?client_id=4281&response_type=token'>
-      Login with AniList
-    </a>
-    <ul>
-      <li v-for="anime in sortedAnimeList" :key="anime.id">
-        <AnimeItem 
-          :name="anime.name" :imgUrl="anime.imgUrl" 
-          :score="anime.score" :id="anime.id" :ogScore="anime.ogScore"
-        />
-      </li>
-    </ul>
+    <div class="buttons">
+      <button class="button is-warning is-medium" @click="updateList">Update</button>
+      <button class="button is-info is-medium" @click="this.animeList.forEach(anime => anime.score = anime.ogScore)">Reset</button>
+    </div>
+    <table class="table is-hoverable is-fullwidth is-size-5 is-size-6-mobile">
+      <thead>
+        <tr>
+          <th style="width: 1%"></th> <!-- Makes it take minimum required space -->
+          <th>Name</th>
+          <th class="has-text-centered">Original Score</th>
+          <th class="has-text-centered">New Score</th>
+        </tr>
+      </thead>
+      <transition-group name="flip-list" tag="tbody">
+        <tr v-for="anime in sortedAnimeList" :key="anime.id">
+          <AnimeItem 
+            :name="anime.name" :imgUrl="anime.imgUrl" 
+            :score="anime.score" :id="anime.id" :ogScore="anime.ogScore"
+          />
+        </tr>
+      </transition-group>
+    </table>
   </section>
+  <ConfirmModal 
+    :active="confirmModalActive" @close="confirmModalActive = false" 
+    @confirmed="updateList" @bypass="this.confirmModalBypass = !this.confirmModalBypass" 
+  />
 </template>
 
 <script>
 import AnimeItem from './components/AnimeItem.vue'
-import UsernameForm from './components/UsernameForm.vue'
 import AnimeCompare from './components/AnimeCompare.vue'
+import ConfirmModal from './components/ConfirmModal.vue'
 
 export default {
   name: 'App',
   components: {
     AnimeItem,
-    UsernameForm,
-    AnimeCompare
+    AnimeCompare,
+    ConfirmModal
   },
   data() {
     return {
       animeList: [], 
       compareSet: [],
       userError: '',
-      accessToken: window.location.hash.match(/(?<=access_token=)(.*?)(?=&)/)[0]
+      accessToken: null,
+      confirmModalActive: false,
+      confirmModalBypass: false
       };
   },
   created() {
-    if (sessionStorage.getItem("animeList")) {
-      this.animeList = JSON.parse(sessionStorage.getItem("animeList"))
+    /*
+    Only two things are stored in session storage: the accessToken and the animeList
+    Initially checks if accessToken is saved
+    getUserId calls getUserList, which conditionally checks whether animeList is saved
+    if an invalid access toke is saved, getUserId catches an error and resets it to null
+    */
+    if (sessionStorage.getItem("accessToken")) {
+      this.accessToken = sessionStorage.getItem("accessToken")
+      this.getUserId()
+    }
+    else {
+      try {
+        this.accessToken = window.location.hash.match(/(?<=access_token=)(.*?)(?=&)/)[0]
+        this.getUserId()
+        sessionStorage.setItem("accessToken", this.accessToken)
+      } 
+      catch (error) {
+        if (!(error instanceof TypeError))
+        {
+          console.log(error)
+        }
+      }
     }
   },
   methods: {
-    getUserId(username) {
+    getUserId() {
       // Anilist API query
       var query = `
-        query ($name: String) {
-          User (search: $name) {
+        query {
+          Viewer {
             id
           }
         }
       `;
 
-      var variables = {
-        name: username
-      };
-
       var url = 'https://graphql.anilist.co',
         options = {
           method: 'POST',
           headers: {
+            'Authorization': 'Bearer ' + this.accessToken,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
           body: JSON.stringify({
-            query: query,
-            variables: variables
+            query: query
           })
       };
 
-      // Make the HTTP Api request
       fetch(url, options)
-        .then(response => {
-          if (response.ok) {
-            this.userError = '' // Remove any error that was there
-            return response.json()
-          } else if(response.status === 404) {
-            return Promise.reject(404)
-          } else {
-            return Promise.reject(response.status)
-          }
-        })
-        .then(data => this.getList(data.data.User.id))
-        .catch(error => {
-          if (error == 404) {
-            this.userError = username
-          } else {
-            console.log("Error:", error)
-          }
-        })
-      
-      /*function handleData(data) {
-        console.log(data);
-      }*/
+        .then(response => response.json())
+        .then(data => this.getList(data.data.Viewer.id))
+        .catch(this.handleAccessTokenError)
+    },
+
+    handleAccessTokenError() {
+      this.accessToken = null
+      sessionStorage.setItem("accessToken", this.accessToken)
     },
 
     getList(id) {
+      // If the list is already saved in memory, load it and yeet out
+      if (sessionStorage.getItem("animeList")) {
+        this.animeList = JSON.parse(sessionStorage.getItem("animeList"))
+        this.newComparison()
+        return 1
+      }
       // Anilist API query
       var query = `
         query ($userId: Int) {
@@ -179,12 +215,14 @@ export default {
           }
         }
       }
+      this.newComparison()
     },
 
     updateList() {
-      if (!this.accessToken) {
-        return console.log("dwaio")
-      
+      // Check if we need to confirm, or if the modal is already active
+      if (!(this.confirmModalBypass || this.confirmModalActive)) {
+        this.confirmModalActive = true
+        return 1
       }
 
       // Filter and round anime scores
@@ -244,8 +282,6 @@ export default {
     },
 
     newComparison() {
-      this.compareSet.length = 0;
-
       // Because lol javascript
       const random = (len) => Math.floor(Math.random() * len)
 
@@ -258,9 +294,32 @@ export default {
   computed: {
     // So I don't have to bother with resorting the array and saving state every time I make a change
     sortedAnimeList: function() {
-      sessionStorage.setItem('animeList', JSON.stringify(this.animeList))
+      // Checks if animeList actually has anything so I don't save an empty list to session memory
+      if (this.animeList.length) {
+        sessionStorage.setItem('animeList', JSON.stringify(this.animeList))
+      }
       return [...this.animeList].sort((a, b) => b.score - a.score); // thank you ES6, very cool
     }
   }
 }
 </script>
+<style>
+  .flip-list-move {
+    transition: transform 0.8s ease;
+  }
+
+  .compare-list-enter-active,
+  .compare-list-leave-active {
+    transition: all 1s ease-in-out;
+  }
+
+  .compare-list-enter-from,
+  .compare-list-leave-to {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  
+  .compare-list-leave-active {
+    display: none;
+  }
+</style>
