@@ -222,7 +222,9 @@ export default {
             var title = entry.media.title.romaji;
             var cover = entry.media.coverImage.medium;
             var large = entry.media.coverImage.extraLarge;
-            this.animeList.push({ name: title, id: item_id, imgUrl: cover, largeImgUrl: large, score: score, ogScore: score});
+            if (score != 0) {
+              this.animeList.push({ name: title, id: item_id, imgUrl: cover, largeImgUrl: large, score: score, ogScore: score});
+            }
           }
         }
       }
